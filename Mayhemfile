@@ -1,0 +1,27 @@
+FROM fuzzers/afl:2.52
+
+RUN apt-get update
+RUN apt install -y build-essential wget git clang zlib1g zlib1g-dev
+RUN wget https://cmake.org/files/v3.14/cmake-3.14.2.tar.gz
+RUN tar -xzvf cmake-3.14.2.tar.gz
+WORKDIR /cmake-3.14.2
+RUN ./bootstrap
+RUN make -j$(nproc)
+RUN make install
+WORKDIR /
+RUN git clone https://github.com/kuba--/zip 
+WORKDIR /zip
+RUN cmake -DCMAKE_C_COMPILER=afl-clang -DBUILD_SHARED_LIBS=true .
+RUN make
+RUN make install
+COPY src/fuzz.c .
+COPY src/*.h /zip/
+RUN afl-clang -L/usr/local/lib fuzz.c -o /zipentry_fuzz -lzip
+RUN mkdir /zipCorpus
+RUN wget https://file-examples.com/wp-content/uploads/2017/10/file_example_PNG_500kB.png
+RUN wget https://people.sc.fsu.edu/~jburkardt/data/png/coins.png
+RUN mv *.png /zipCorpus
+ENV LD_LIBRARY_PATH=/usr/local/lib
+
+ENTRYPOINT ["afl-fuzz", "-i", "/zipCorpus", "-o", "/zipOut"]
+CMD ["/zipentry_fuzz", "@@"]
